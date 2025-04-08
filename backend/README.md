@@ -1,20 +1,14 @@
 # UWOpenRecRoster2-Backend
 
-Backend written in GO for [UWOpenRecRoster2](https://github.com/HaydenDippL/UWOpenRecRoster2). Check our DOCS.md for information about the code in the project.
+Backend written in GO to fetch schedules, memoize schedules, and track user activity.
 
 ## Endpoint
 
-`GET /schedule` with the parameters:
+`GET /schedule` with the a date parameter of the form `"yyyy-mm-dd"`. This will return the schedules of the Nick and Bakke for all facilities - courts, pools, climbing walls, esports, and ice rink. A query to fetch 2025 April Fools schedule looks like this
 
-- `date` with a date in the ISO Date format `"2024-12-25` for December 25, 2024
-- `gyms` represents which gyms we want. This paramter is a comma separated list which may contain `"Bakke"` and or `"Nick"`
-- `facilities` represents what type of facilities we are are querying. This is a comma separated list, similar to `gym` with the following possible options: `"Courts"`, `"Pool"`, `"RockWall"`, `"Esports"`.
+`GET /schedule?date=2025-04-01`
 
-A full query may look like 
-
-`GET /schedule?date=12-25-2025&gym=Bakke,Nick&facilities=Courts,Pool`
-
-It returns data in the following form, all dates are ISO DateTimes (RFC 3339).
+It returns data in the following form. **NOTE** all dates are ISO DateTimes (RFC 3339). **NOTE** that both the Bakke and Nick return a fields for all facilities and potentially contain null if no events are scheduled or if that gym does not have said facility.
 
 ```
 {
@@ -36,6 +30,7 @@ It returns data in the following form, all dates are ISO DateTimes (RFC 3339).
                 end: "2025-03-11T10:00:00Z"
             }
         ]
+        ...
     },
     Nick: {
         Courts: [
@@ -44,41 +39,17 @@ It returns data in the following form, all dates are ISO DateTimes (RFC 3339).
         Pool: [
             ...
         ]
+        ...
     }
 }
 ```
 
-## Requirements
+## Code 
 
-Need Go and required build tools
+This project is separated into four main files: `logging.go`, `memo.go`, `schedule.go`, and `main.go`. 
 
-```
-sudo apt-get install -y \
-    build-essential \
-    gcc-multilib \
-    linux-libc-dev \
-    libgcc-s1 \
-    libc6-dev
-```
+- `schedule.go` has a function `fetchSchedules(date)` which actually goes and requests the schedules from the RecWell APIs.
+- `memo.go` is responsible for taking a schedule and memoizing it in the postgres database. The `schedules` table only contains memoized schedule responses for a given query if the date within three days prior or two weeks in the future: `[-3 days, 14 days]. When fetching a schedule, the schedule becomes stale if it is over an hour old and it will delete that schedule from the table. 
+- `logging.go` is responsible for logging user activity into the `users`, `sessions`, and `queries` databases for user analytics purposes. The `log_event()` function takes a user-id (possible empty), session-id (possibly empty) and a query date. It will ensure the user-id is valid or create one and will do the same for the session-id while ensuring that the session-id belongs to the user-id. With these ids it will log the queried date. If a new session-id or user-id is generated, it returns it in the return tuple.
+- `main.go` it the heart of the application and where the endpoints, middleware, and main function lay. Interfaces with `schedules.go`, `memo.go`, and `logging.go`. 
 
-Install postgres
-
-```
-sudo apt install postgresql postgresql-contrib
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
-```
-
-```
-go get github.com/gin-gonic/gin
-go get gorm.io/gorm
-go get gorm.io/driver/postgres
-```
-
-## PSQL
-
-Connect to Postgres DB
-
-```
-psql -h <DB_HOST> -U <DB_USER> -d <DB_NAME> -p <DB_PORT>
-```

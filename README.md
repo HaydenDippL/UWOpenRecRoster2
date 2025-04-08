@@ -17,4 +17,35 @@ This project is build on a docker cluster. The `docker-compose.yml` defines the 
 - Backend container on port `8001` which contains the go server for the backend endpoints
 - A frontend container on port `8000` which doubles as the frontend app location aswell as a reverse proxy to map API calls to the backend with nginx.
 
-This assumes that you have a 
+Check out the [Frontend](frontend/README.md) and [Backend](backend/README.md) READMEs
+
+### Connect
+
+The service names are `nginx`, `postgres`, and `backend`. 
+
+---
+
+Connect to the psql server
+
+```
+docker compose exec postgres sh
+psql -h <DB_HOST> -U <DB_USER> -d <DB_NAME> -p <DB_PORT>
+```
+
+Connect to the nginx server or backend
+
+```
+docker compose exec nginx sh
+```
+
+```
+docker compose exec backend sh
+```
+
+---
+
+Get the logs with 
+
+```
+docker compose logs <service-name>
+```
