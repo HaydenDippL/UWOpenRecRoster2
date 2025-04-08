@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: ${DB_USER:-notme}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-supersecurenotmepassword}
+      POSTGRES_DB: ${DB_NAME:-notsosecuredbname}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+    ports:
+      - "${MACHINE_DB_PORT:-8002}:${CONTAINER_DB_PORT:-5432}"
+
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_USER: ${DB_USER:-notme}
+      DB_PASSWORD: ${DB_PASSWORD:-supersecurenotmepassword}
+      DB_NAME: ${DB_NAME:-notsosecuredbname}
+      DB_PORT: ${CONTAINER_DB_PORT:-5432}
+    ports:
+      - "${MACHINE_BACKEND_PORT:-8001}:${CONTAINER_BACKEND_PORT:-8000}"
+    depends_on:
+      - postgres
+    networks:
+      - app_network
+
+  nginx:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${MACHINE_FRONTEND_PORT:-8000}:80"
+      - "443:443"
+    depends_on:
+      - backend
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
