@@ -63,7 +63,7 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }) {
         const sessionId = resp.headers.get("X-Session-Id");
         if (sessionId) {
             const one_hour = 1 / 24;
-            Cookies.set("userId", sessionId, { expires: one_hour, ...jsCookiesDefaultSettings });
+            Cookies.set("sessionId", sessionId, { expires: one_hour, ...jsCookiesDefaultSettings });
         }
     
         const schedules: ScheduleResp = await resp.json();
