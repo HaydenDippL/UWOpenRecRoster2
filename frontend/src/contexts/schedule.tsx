@@ -1,7 +1,7 @@
 import React, { useState, useContext, createContext } from "react";
 import { ScheduleResp } from "../types/schedule";
 import { DateTime } from "luxon";
-import { useAuth } from "./auth";
+import Cookies from "js-cookie";
 
 interface ScheduleContextType {
     schedules: ScheduleResp | null;
@@ -22,7 +22,7 @@ export function useSchedule(): ScheduleContextType {
     if (!context) {
         throw new Error("useSchedule must be used within an ScheduleProvider");
     }
-    return context
+    return context;
 }
  
 /**
@@ -35,7 +35,6 @@ export function useSchedule(): ScheduleContextType {
  */
 export function ScheduleProvider({ children }: { children: React.ReactNode }) {
     const [schedules, setSchedules] = useState<ScheduleResp | null>(null);
-    const auth = useAuth();
 
     /**
      * Fetches the schedules from the GO backend for the given date
@@ -45,27 +44,31 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }) {
      * @throws error if the request fails
      */
     const fetchSchedules = async(date: DateTime): Promise<ScheduleResp | null> => {
-        const formatedDate: string = date.toFormat("yyyy-MM-dd")
+        const formatedDate: string = date.toFormat("yyyy-MM-dd");
     
-        const resp = await fetch(`http://localhost:8001/schedule?date=${formatedDate}`)
+        const resp = await fetch(`http://localhost:8001/schedule?date=${formatedDate}`);
     
         if (resp.status !== 400) {
-            console.error("Failed to fetch schedules...")
+            console.error("Failed to fetch schedules...");
             return null;
         }
     
-        const userId = resp.headers.get("X-User-Id")
+        // If backend sends back userId or sessionId, set them in cookies
+        const jsCookiesDefaultSettings: Cookies.CookieAttributes = { path: "/schedule", secure: true, sameSite: "Strict" };
+        const userId = resp.headers.get("X-User-Id");
         if (userId) {
-            auth.setAndStoreUserId(userId)
+            const one_thousand_days = 1000;
+            Cookies.set("userId", userId, { expires: one_thousand_days, ...jsCookiesDefaultSettings });
         }
-        const sessionId = resp.headers.get("X-Session-Id")
+        const sessionId = resp.headers.get("X-Session-Id");
         if (sessionId) {
-            auth.setSessionId(sessionId)
+            const one_hour = 1 / 24;
+            Cookies.set("userId", sessionId, { expires: one_hour, ...jsCookiesDefaultSettings });
         }
     
-        const schedules: ScheduleResp = await resp.json()
-        setSchedules(schedules)
-        return schedules
+        const schedules: ScheduleResp = await resp.json();
+        setSchedules(schedules);
+        return schedules;
     }
 
     const value = {
