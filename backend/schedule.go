@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type GymMetaData struct {
@@ -134,7 +135,10 @@ func convertEventsToSchedule(events models.EventsRaw) models.FacilityEvents {
 	for _, eventRaw := range events.Events {
 		location := strings.ToLower(strings.TrimSpace(eventRaw.Location))
 
-		var event models.Event = transformAndDecodeRawEvent(eventRaw)
+		event, err := transformAndDecodeRawEvent(eventRaw)
+		if err != nil {
+			continue
+		}
 
 		if strings.Contains(location, court) {
 			schedule.Courts = append(schedule.Courts, event)
@@ -152,11 +156,32 @@ func convertEventsToSchedule(events models.EventsRaw) models.FacilityEvents {
 	return schedule
 }
 
-func transformAndDecodeRawEvent(event models.EventRaw) models.Event {
+func transformAndDecodeRawEvent(event models.EventRaw) (models.Event, error) {
+	loc, err := time.LoadLocation("America/Chicago")
+	if err != nil {
+		return models.Event{}, fmt.Errorf("error loading America/Chicago timezone data")
+	}
+
+	// Parse as UTC first since input has no timezone
+	timeFormat := "2006-01-02T15:04:05"
+	startTime, err := time.Parse(timeFormat, event.EventStart)
+	if err != nil {
+		return models.Event{}, fmt.Errorf("error parsing start time: %v", err)
+	}
+
+	endTime, err := time.Parse(timeFormat, event.EventEnd)
+	if err != nil {
+		return models.Event{}, fmt.Errorf("error parsing end time: %v", err)
+	}
+
+	// Convert UTC times to Chicago timezone
+	startTimeChicago := startTime.In(loc)
+	endTimeChicago := endTime.In(loc)
+
 	return models.Event{
 		Name:     strings.TrimSpace(html.UnescapeString(event.EventName)),
 		Location: strings.TrimSpace(html.UnescapeString(event.Location)),
-		Start:    event.EventStart,
-		End:      event.EventEnd,
-	}
+		Start:    startTimeChicago.Format(time.RFC3339),
+		End:      endTimeChicago.Format(time.RFC3339),
+	}, nil
 }

@@ -52,40 +52,40 @@ func TestConvertEventsToSchedule(t *testing.T) {
 					{
 						Name:     "Basketball",
 						Location: "Court 1",
-						Start:    "2025-04-11T11:00:00",
-						End:      "2025-04-11T12:00:00",
+						Start:    "2025-04-11T06:00:00-05:00",
+						End:      "2025-04-11T07:00:00-05:00",
 					},
 				},
 				Pool: []models.Event{
 					{
 						Name:     "Swim Practice",
 						Location: "Pool Lane 1",
-						Start:    "2025-04-11T13:00:00",
-						End:      "2025-04-11T14:00:00",
+						Start:    "2025-04-11T08:00:00-05:00",
+						End:      "2025-04-11T09:00:00-05:00",
 					},
 				},
 				Esports: []models.Event{
 					{
 						Name:     "Gaming Tournament",
 						Location: "Esports Arena",
-						Start:    "2025-04-11T15:00:00",
-						End:      "2025-04-11T16:00:00",
+						Start:    "2025-04-11T10:00:00-05:00",
+						End:      "2025-04-11T11:00:00-05:00",
 					},
 				},
 				MtMendota: []models.Event{
 					{
 						Name:     "Climbing",
 						Location: "Mount Mendota",
-						Start:    "2025-04-11T17:00:00",
-						End:      "2025-04-11T18:00:00",
+						Start:    "2025-04-11T12:00:00-05:00",
+						End:      "2025-04-11T13:00:00-05:00",
 					},
 				},
 				IceRink: []models.Event{
 					{
 						Name:     "Hockey",
 						Location: "Ice Rink",
-						Start:    "2025-04-11T19:00:00",
-						End:      "2025-04-11T20:00:00",
+						Start:    "2025-04-11T14:00:00-05:00",
+						End:      "2025-04-11T15:00:00-05:00",
 					},
 				},
 			},
@@ -148,6 +148,7 @@ func TestTransformAndDecodeRawEvent(t *testing.T) {
 		name     string
 		event    models.EventRaw
 		expected models.Event
+		err      bool
 	}{
 		{
 			name: "whitespace check",
@@ -156,12 +157,14 @@ func TestTransformAndDecodeRawEvent(t *testing.T) {
 				Location:   "Court 4",
 				EventStart: "2025-04-11T11:00:00",
 				EventEnd:   "2025-04-11T21:30:00",
-			}, expected: models.Event{
+			},
+			expected: models.Event{
 				Name:     "Open Rec Pickleball",
 				Location: "Court 4",
-				Start:    "2025-04-11T11:00:00",
-				End:      "2025-04-11T21:30:00",
+				Start:    "2025-04-11T06:00:00-05:00",
+				End:      "2025-04-11T16:30:00-05:00",
 			},
+			err: false,
 		},
 		{
 			name: "html decode check",
@@ -174,15 +177,20 @@ func TestTransformAndDecodeRawEvent(t *testing.T) {
 			expected: models.Event{
 				Name:     "Sports Leadership Program & Rec Well",
 				Location: "Court 3",
-				Start:    "2025-04-11T13:30:00",
-				End:      "2025-04-11T14:30:00",
+				Start:    "2025-04-11T08:30:00-05:00",
+				End:      "2025-04-11T09:30:00-05:00",
 			},
+			err: false,
 		},
 	}
 
 	for i, test := range tests {
-		actual := transformAndDecodeRawEvent(test.event)
-		if actual != test.expected {
+		actual, err := transformAndDecodeRawEvent(test.event)
+		if (err != nil) != test.err {
+			t.Errorf("transformAndDecodeRawEvent() on test %d\n"+
+				"error encountered: %v\n"+
+				"error expected: %v", i, err, test.err)
+		} else if actual != test.expected {
 			t.Errorf("transformAndDecodeRawEvent() on test %d\n"+
 				"event: %v\n"+
 				"expected: %v\n"+
