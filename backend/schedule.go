@@ -1,15 +1,15 @@
 package main
 
 import (
+	"UWOpenRecRoster2-Backend/models"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
 	"net/http"
 	"strings"
-    "errors"
-    "UWOpenRecRoster2-Backend/models"
 )
 
 type GymMetaData struct {
@@ -34,39 +34,39 @@ var (
 const RECWELL_SCHEDULES_URL string = "https://uwmadison.emscloudservice.com/web/AnonymousServersApi.aspx/CustomBrowseEvents"
 
 func fetchSchedules(date string) (models.ScheduleResp, error) {
-    var schedule models.ScheduleResp
+	var schedule models.ScheduleResp
 
-    for _, gym := range []string{"bakke", "nick"} {
-        gymEvents, err := fetchSchedule(date, gym);
-        if err != nil {
-            return models.ScheduleResp{}, fmt.Errorf("error fetching the %s schedule", gym)
-        }
-        
-        if gym == "bakke" {
-            schedule.Bakke = gymEvents
-        } else {
-            schedule.Nick = gymEvents
-        }
-    }
+	for _, gym := range []string{"bakke", "nick"} {
+		gymEvents, err := fetchSchedule(date, gym)
+		if err != nil {
+			return models.ScheduleResp{}, fmt.Errorf("error fetching the %s schedule", gym)
+		}
 
-    return schedule, nil
+		if gym == "bakke" {
+			schedule.Bakke = gymEvents
+		} else {
+			schedule.Nick = gymEvents
+		}
+	}
+
+	return schedule, nil
 }
 
 func fetchSchedule(date string, gym string) (models.FacilityEvents, error) {
-    var gymMeta GymMetaData
+	var gymMeta GymMetaData
 
-    switch gym {
-    case "bakke":
-        gymMeta = bakke
-    case "nick":
-        gymMeta = nick
-    default:
-        return models.FacilityEvents{}, errors.New("gym must be either \"bakke\" or \"nick\"")
-    }
+	switch gym {
+	case "bakke":
+		gymMeta = bakke
+	case "nick":
+		gymMeta = nick
+	default:
+		return models.FacilityEvents{}, errors.New("gym must be either \"bakke\" or \"nick\"")
+	}
 
 	body := models.RequestBody{
 		Date: date,
-    	Data: models.RequestData{
+		Data: models.RequestData{
 			BuildingId:       gymMeta.id,
 			Title:            gymMeta.title,
 			Format:           0,
@@ -100,7 +100,7 @@ func fetchSchedule(date string, gym string) (models.FacilityEvents, error) {
 		return models.FacilityEvents{}, fmt.Errorf("failed to parse schedule: %w", err)
 	}
 
-    return events, nil
+	return events, nil
 }
 
 func parseSchedule(schedule []byte) (models.FacilityEvents, error) {
@@ -116,7 +116,7 @@ func parseSchedule(schedule []byte) (models.FacilityEvents, error) {
 		return models.FacilityEvents{}, fmt.Errorf("error parsing JSON: %w", err)
 	}
 
-    var convertedEvents models.FacilityEvents = convertEventsToSchedule(events) 
+	var convertedEvents models.FacilityEvents = convertEventsToSchedule(events)
 
 	return convertedEvents, nil
 }
@@ -130,34 +130,33 @@ const (
 )
 
 func convertEventsToSchedule(events models.EventsRaw) models.FacilityEvents {
-    schedule := models.FacilityEvents{}
-    for _, eventRaw := range events.Events {
-        location := strings.ToLower(strings.TrimSpace(eventRaw.Location))
-        
-        var event models.Event = transformAndDecodeRawEvent(eventRaw)
-        
-        if strings.Contains(location, court) {
-            schedule.Courts = append(schedule.Courts, event)
-        } else if strings.Contains(location, mtMendota) {
-            schedule.MtMendota = append(schedule.MtMendota, event)
-        } else if strings.Contains(location, pool) {
-            schedule.Pool = append(schedule.Pool, event)
-        } else if strings.Contains(location, iceRink) {
-            schedule.IceRink = append(schedule.IceRink, event)
-        } else if strings.Contains(location, esports) {
-            schedule.Esports = append(schedule.Esports, event)   
-        }
-    }
+	schedule := models.FacilityEvents{}
+	for _, eventRaw := range events.Events {
+		location := strings.ToLower(strings.TrimSpace(eventRaw.Location))
 
-    return schedule
+		var event models.Event = transformAndDecodeRawEvent(eventRaw)
+
+		if strings.Contains(location, court) {
+			schedule.Courts = append(schedule.Courts, event)
+		} else if strings.Contains(location, mtMendota) {
+			schedule.MtMendota = append(schedule.MtMendota, event)
+		} else if strings.Contains(location, pool) {
+			schedule.Pool = append(schedule.Pool, event)
+		} else if strings.Contains(location, iceRink) {
+			schedule.IceRink = append(schedule.IceRink, event)
+		} else if strings.Contains(location, esports) {
+			schedule.Esports = append(schedule.Esports, event)
+		}
+	}
+
+	return schedule
 }
 
 func transformAndDecodeRawEvent(event models.EventRaw) models.Event {
-    return models.Event{
-        Name: html.UnescapeString(event.EventName),
-        Location: html.UnescapeString(event.Location),
-        Start: event.EventStart,
-        End: event.EventEnd,
-    }
+	return models.Event{
+		Name:     strings.TrimSpace(html.UnescapeString(event.EventName)),
+		Location: strings.TrimSpace(html.UnescapeString(event.Location)),
+		Start:    event.EventStart,
+		End:      event.EventEnd,
+	}
 }
-
