@@ -60,8 +60,10 @@ function App() {
 
     function toggleFocusedActivity(activity: keyof FocusedActivities): void {
         setFocusedActivities(prev => {
-            prev[activity] = !prev[activity];
-            return prev;
+            return {
+                ...prev,
+                [activity]: !prev[activity]
+            };
         });
     }
 
@@ -97,12 +99,19 @@ function App() {
         <div>{
             openRecActivities.map((openRecActivity, i) => {
                 return <div key={i} className="flex flex-row">
-                    <input type="checkbox" className="toggle toggle-primary"/>
-                    <p>{ openRecActivity }</p>
+                    <input 
+                        type="checkbox" 
+                        className="toggle toggle-primary"
+                        checked={focusedActivities[openRecActivity as keyof FocusedActivities]}
+                        onChange={() => toggleFocusedActivity(openRecActivity as keyof FocusedActivities)}
+                    />
+                    <p>{openRecActivity}</p>
                 </div>
             })
         }</div>
-        <Schedule gym={Gym.bakke} facility={Facility.courts} date={today} />
+        <Schedule gym={Gym.bakke} facility={facility} date={today} />
+        <div className="h-4" />
+        <Schedule gym={Gym.nick} facility={facility} date={today} />
     </main>
 }
 
