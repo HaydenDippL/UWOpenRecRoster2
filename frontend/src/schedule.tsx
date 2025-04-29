@@ -32,14 +32,6 @@ export default function Schedule({ gym, facility, date }: ScheduleProps) {
     const MINUTES_IN_SCHEDULE = 18 * 60;
     const sixAm = date.setZone("America/Chicago", { keepLocalTime: true }).set({ hour: 6, minute: 0, second: 0, millisecond: 0 });
     
-    console.log(
-        events.map(event => ({
-            ...event,
-            start: event.start.toISO(),
-            end: event.end.toISO()
-        }))
-    );
-
     const num_buckets: number = events.reduce((acc, curr) => {
         return Math.max(acc, curr.bucket);
     }, 0) + 1;
