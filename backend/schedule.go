@@ -34,7 +34,7 @@ var (
 
 const RECWELL_SCHEDULES_URL string = "https://uwmadison.emscloudservice.com/web/AnonymousServersApi.aspx/CustomBrowseEvents"
 
-func fetchSchedules(date string) (models.ScheduleResp, error) {
+func fetchSchedules(date time.Time) (models.ScheduleResp, error) {
 	var schedule models.ScheduleResp
 
 	for _, gym := range []string{"bakke", "nick"} {
@@ -53,7 +53,31 @@ func fetchSchedules(date string) (models.ScheduleResp, error) {
 	return schedule, nil
 }
 
-func fetchSchedule(date string, gym string) (models.FacilityEvents, error) {
+func fetchSchedule(date time.Time, gym string) (models.FacilityEvents, error) {
+	dateString := date.Format("2006-01-02")
+	scheduleJson, err := fetchScheduleFromRecwell(dateString, gym)
+	if err != nil {
+		return models.FacilityEvents{}, fmt.Errorf("error fetching schedule from Recwell API: %w", err)
+	}
+
+	rawEvents, err := parseScheduleJson(scheduleJson)
+	if err != nil {
+		return models.FacilityEvents{}, fmt.Errorf("error parsing schedule json: %w", err)
+	}
+
+	validDateEvents, err := mapAndFilterDatesSameDay(rawEvents, date)
+	if err != nil {
+		return models.FacilityEvents{}, fmt.Errorf("error handling dates: %w", err)
+	}
+
+	events := mapEscapeStrings(validDateEvents)
+
+	facilityEvents := reduceEventsToFacilityEvents(events)
+
+	return facilityEvents, nil
+}
+
+func fetchScheduleFromRecwell(date string, gym string) ([]byte, error) {
 	var gymMeta GymMetaData
 
 	switch gym {
@@ -62,7 +86,7 @@ func fetchSchedule(date string, gym string) (models.FacilityEvents, error) {
 	case "nick":
 		gymMeta = nick
 	default:
-		return models.FacilityEvents{}, errors.New("gym must be either \"bakke\" or \"nick\"")
+		return []byte{}, errors.New("gym must be either \"bakke\" or \"nick\"")
 	}
 
 	body := models.RequestBody{
@@ -78,48 +102,96 @@ func fetchSchedule(date string, gym string) (models.FacilityEvents, error) {
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return models.FacilityEvents{}, fmt.Errorf("failed to marshal request body: %w", err)
+		return []byte{}, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
 	resp, err := http.Post(RECWELL_SCHEDULES_URL, "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return models.FacilityEvents{}, fmt.Errorf("failed to make HTTP request: %w", err)
+		return []byte{}, fmt.Errorf("failed to make HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return models.FacilityEvents{}, fmt.Errorf("unexpected status code %d", resp.StatusCode)
+		return []byte{}, fmt.Errorf("unexpected status code %d", resp.StatusCode)
 	}
 
-	schedule, err := io.ReadAll(resp.Body)
+	scheduleBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return models.FacilityEvents{}, fmt.Errorf("failed to read response body: %w", err)
+		return []byte{}, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	events, err := parseSchedule(schedule)
-	if err != nil {
-		return models.FacilityEvents{}, fmt.Errorf("failed to parse schedule: %w", err)
-	}
-
-	return events, nil
+	return scheduleBytes, nil
 }
 
-func parseSchedule(schedule []byte) (models.FacilityEvents, error) {
+func parseScheduleJson(scheduleJson []byte) (models.EventsRaw, error) {
 	var resp models.ResponseBody
-	err := json.Unmarshal(schedule, &resp)
+	err := json.Unmarshal(scheduleJson, &resp)
 	if err != nil {
-		return models.FacilityEvents{}, fmt.Errorf("error parsing JSON: %w", err)
+		return models.EventsRaw{}, fmt.Errorf("error parsing JSON: %w", err)
 	}
 
 	var events models.EventsRaw
 	err = json.Unmarshal([]byte(resp.Data), &events)
 	if err != nil {
-		return models.FacilityEvents{}, fmt.Errorf("error parsing JSON: %w", err)
+		return models.EventsRaw{}, fmt.Errorf("error parsing JSON: %w", err)
 	}
 
-	var convertedEvents models.FacilityEvents = convertEventsToSchedule(events)
+	return events, nil
+}
 
-	return convertedEvents, nil
+func mapAndFilterDatesSameDay(events models.EventsRaw, date time.Time) ([]models.Event, error) {
+	loc, err := time.LoadLocation("America/Chicago")
+	if err != nil {
+		return []models.Event{}, fmt.Errorf("error loading America/Chicago timezone data")
+	}
+
+	dateDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, loc)
+
+	eventsFiltered := []models.Event{}
+	for _, event := range events.Events {
+		timeFormat := "2006-01-02T15:04:05"
+		startTime, err := time.Parse(timeFormat, event.EventStart)
+		if err != nil {
+			continue
+		}
+
+		endTime, err := time.Parse(timeFormat, event.EventEnd)
+		if err != nil {
+			continue
+		}
+
+		// Convert UTC times to Chicago timezone
+		startTimeChicago := startTime.In(loc)
+		endTimeChicago := endTime.In(loc)
+
+		eventDate := time.Date(startTimeChicago.Year(), startTimeChicago.Month(), startTimeChicago.Day(), 0, 0, 0, 0, loc)
+		if !eventDate.Equal(dateDay) {
+			continue
+		}
+
+		eventsFiltered = append(eventsFiltered, models.Event{
+			Name:     event.EventName,
+			Location: event.Location,
+			Start:    startTimeChicago.Format(time.RFC3339),
+			End:      endTimeChicago.Format(time.RFC3339),
+		})
+	}
+
+	return eventsFiltered, nil
+}
+
+func mapEscapeStrings(events []models.Event) []models.Event {
+	eventsEscaped := make([]models.Event, len(events))
+	for i, event := range events {
+		eventsEscaped[i] = models.Event{
+			Name:     strings.TrimSpace(html.UnescapeString(event.Name)),
+			Location: strings.TrimSpace(html.UnescapeString(event.Location)),
+			Start:    event.Start,
+			End:      event.End,
+		}
+	}
+
+	return eventsEscaped
 }
 
 const (
@@ -130,15 +202,10 @@ const (
 	esports   = "esports"
 )
 
-func convertEventsToSchedule(events models.EventsRaw) models.FacilityEvents {
+func reduceEventsToFacilityEvents(events []models.Event) models.FacilityEvents {
 	schedule := models.FacilityEvents{}
-	for _, eventRaw := range events.Events {
-		location := strings.ToLower(strings.TrimSpace(eventRaw.Location))
-
-		event, err := transformAndDecodeRawEvent(eventRaw)
-		if err != nil {
-			continue
-		}
+	for _, event := range events {
+		location := strings.ToLower(event.Location)
 
 		if strings.Contains(location, court) {
 			schedule.Courts = append(schedule.Courts, event)
@@ -154,34 +221,4 @@ func convertEventsToSchedule(events models.EventsRaw) models.FacilityEvents {
 	}
 
 	return schedule
-}
-
-func transformAndDecodeRawEvent(event models.EventRaw) (models.Event, error) {
-	loc, err := time.LoadLocation("America/Chicago")
-	if err != nil {
-		return models.Event{}, fmt.Errorf("error loading America/Chicago timezone data")
-	}
-
-	// Parse as UTC first since input has no timezone
-	timeFormat := "2006-01-02T15:04:05"
-	startTime, err := time.Parse(timeFormat, event.EventStart)
-	if err != nil {
-		return models.Event{}, fmt.Errorf("error parsing start time: %v", err)
-	}
-
-	endTime, err := time.Parse(timeFormat, event.EventEnd)
-	if err != nil {
-		return models.Event{}, fmt.Errorf("error parsing end time: %v", err)
-	}
-
-	// Convert UTC times to Chicago timezone
-	startTimeChicago := startTime.In(loc)
-	endTimeChicago := endTime.In(loc)
-
-	return models.Event{
-		Name:     strings.TrimSpace(html.UnescapeString(event.EventName)),
-		Location: strings.TrimSpace(html.UnescapeString(event.Location)),
-		Start:    startTimeChicago.Format(time.RFC3339),
-		End:      endTimeChicago.Format(time.RFC3339),
-	}, nil
 }

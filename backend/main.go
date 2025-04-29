@@ -128,7 +128,7 @@ func schedule(c *gin.Context) {
 
 	// If we could not get the memoized schedule, attempt to fetch it.
 	// If we successfully fetch the schedule, attempt to memoize it
-	schedule, err = fetchSchedules(date)
+	schedule, err = fetchSchedules(parsedDate)
 	if err == nil {
 		if memoErr := memoSchedule(schedule, parsedDate); memoErr != nil {
 			log.Printf("Error on memoize of %s: %v\n", date, memoErr)
