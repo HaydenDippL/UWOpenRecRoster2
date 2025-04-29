@@ -54,4 +54,5 @@ export interface ProcessedEvent {
     bucket: number;
     start: DateTime;
     end: DateTime;
+    color: string;
 }

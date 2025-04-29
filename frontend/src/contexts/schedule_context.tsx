@@ -156,8 +156,6 @@ export function process_events(events: Event[], gym: Gym, facility: Facility): P
         });
     });
 
-    console.log(processed_events)
-
     return processed_events;
 }
 
@@ -248,25 +246,44 @@ export function process_buckets(buckets_unprocessed: Event[][], num_buckets: num
                     end: end_time,
                 } as ProcessedEvent;
             })
-            .sort((a, b) => {
-                return a.start.toMillis() - b.start.toMillis();
-            })
-            .reduce<ProcessedEvent[]>((acc, curr) => {
-                if (acc.length === 0) {
-                    acc.push(curr);
-                    return acc;
-                }
-
-                const prev = acc[acc.length - 1];
-                if (prev.end.plus({ minutes: 5 }) >= curr.start) {
-                    acc[acc.length - 1].end = curr.end;
-                } else {
-                    acc.push(curr);
-                }
-
-                return acc;
-            }, []);
+            .map(event => {
+                const color = map_colors(event);
+                return {
+                    ...event,
+                    color: color
+                };
+            });
     });
 
     return buckets_processed;
+}
+
+const colors: { [key: string]: string } = {
+    "open rec basketball": "#e8881e", // orange
+    "open rec badminton / pickleball": "#008fd1", // blue
+    "open rec badminton/pickleball": "#008fd1", // blue
+    "open rec pickleball / badminton": "#008fd1", // blue
+    "open rec pickleball/badminton": "#008fd1", // blue
+    "open rec badminton": "#008fd1", // blue
+    "open rec pickleball": "#008fd1", // blue
+    "open rec volleyball": "#ebd3a3", // tan
+    "open rec futsal": "#84d100", // green
+    "army rotc": "hsl(57, 44%, 76%, 0.25)", // army sand
+    "navy rotc": "hsl(240, 33%, 37%, 0.25)", // navy blue
+}
+
+export function map_colors(event: ProcessedEvent) {
+    const event_name: string = event.name.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (colors[event_name]) {
+        return colors[event_name];
+    }
+
+    const hue: number = Math.floor(Math.random() * 360);
+    const saturation: number = Math.floor(Math.random() * 30) + 20;
+    const light: number = Math.floor(Math.random() * 10) + 30;
+    const opacity: number = 0.25;
+    const hsl: string = `hsl(${hue}, ${saturation}%, ${light}%, ${opacity})`;
+
+    colors[event_name] = hsl;
+    return hsl;
 }
