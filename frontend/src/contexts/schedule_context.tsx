@@ -69,7 +69,7 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }) {
         }
     
         const schedules: ScheduleResp = await resp.json();
-        const processed_schedules: Schedules = process_schedules(schedules);
+        const processed_schedules: Schedules = process_schedules(schedules, date);
         setSchedules(processed_schedules);
         return schedules;
     }
@@ -89,16 +89,17 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }) {
 
 /**
  * Processes and parses all of the schedules from a schedule request. Validates based on the
- * date and accumulates events in the same court/lane with the same event title within five
- * minutes of starting/ending. 
+ * date and splits the events on the lane/court buckets they belong to. Fills buckets with
+ * no events where there are gaps in the schedule.
  * 
  * @param scheduleResp Raw schedule from GO backend
+ * @param date of the schedule
  * @returns Schedules object with the schedule for all facilities in the Bakke and Nick
  */
-export function process_schedules(scheduleResp: ScheduleResp): Schedules {
+export function process_schedules(scheduleResp: ScheduleResp, date: DateTime): Schedules {
     const bakke_events = Object.values(Facility).reduce((acc, facility) => {
         if (scheduleResp.bakke[facility] !== null) {
-            acc[facility] = process_events(scheduleResp.bakke[facility], Gym.bakke, facility);
+            acc[facility] = process_events(scheduleResp.bakke[facility], Gym.bakke, facility, date);
         }
 
         return acc;
@@ -106,7 +107,7 @@ export function process_schedules(scheduleResp: ScheduleResp): Schedules {
 
     const nick_events = Object.values(Facility).reduce((acc, facility) => {
         if (scheduleResp.nick[facility] !== null) {
-            acc[facility] = process_events(scheduleResp.nick[facility], Gym.nick, facility);
+            acc[facility] = process_events(scheduleResp.nick[facility], Gym.nick, facility, date);
         }
 
         return acc;
@@ -126,9 +127,10 @@ export function process_schedules(scheduleResp: ScheduleResp): Schedules {
  * @param events the events
  * @param gym the gym the events belong to
  * @param facility the facility the events belong to
+ * @param date of the schedule
  * @returns The processed events that have been accumulated, validated, and buckified
  */
-export function process_events(events: Event[], gym: Gym, facility: Facility): ProcessedEvent[] {
+export function process_events(events: Event[], gym: Gym, facility: Facility, date: DateTime): ProcessedEvent[] {
     // Find number of buckets for gym/facility
     let num_buckets: number;
     if (gym === Gym.bakke) {
@@ -150,9 +152,12 @@ export function process_events(events: Event[], gym: Gym, facility: Facility): P
     // map buckets of events to processedEvents and accumulate like events within 5 minutes of start/end
     const buckets_processed: ProcessedEvent[][] = process_buckets(buckets_unprocessed, num_buckets);
 
+    // add no events ("No Event Scheduled") where appropriate
+    const buckets_processed_and_filled: ProcessedEvent[][] = add_no_events(buckets_processed, date)
+
     // put them back into one array for react to process
     const processed_events: ProcessedEvent[] = [];
-    buckets_processed.forEach(bucket => {
+    buckets_processed_and_filled.forEach(bucket => {
         bucket.forEach(event => {
             processed_events.push(event);
         });
@@ -258,6 +263,57 @@ export function process_buckets(buckets_unprocessed: Event[][], num_buckets: num
     });
 
     return buckets_processed;
+}
+
+/**
+ * Adds no events ("No Event Scheduled" events) to the buckets in the gaps of events.
+ * 
+ * @param buckets to have no events added
+ * @param date the date of the schedule
+ * @returns the buckets with all gaps filled with no events
+ */
+export function add_no_events(buckets: ProcessedEvent[][], date: DateTime): ProcessedEvent[][] {
+    const sixAm: DateTime = date.setZone("America/Chicago", { keepLocalTime: true }).set({ hour: 6, minute: 0, second: 0, millisecond: 0 });
+    const midnight: DateTime = sixAm.plus({ hours: 18 });
+
+    function create_no_event(bucket: number, start: DateTime, end: DateTime): ProcessedEvent {
+        return {
+            name: "No Event Scheduled",
+            bucket: bucket,
+            start: start,
+            end: end,
+            color: "rgb(102, 103, 105)"
+        } as ProcessedEvent;
+    }
+
+    return buckets.map((bucket, b) => {
+        if (bucket.length == 0) {
+            return [create_no_event(b, sixAm, midnight)];
+        }
+
+        // ends at 6am for looping logic below on the case of the first event
+        let prevEvent: ProcessedEvent = create_no_event(b, sixAm, sixAm);
+
+        return bucket.reduce((acc, event, i) => {
+            const newEvents: ProcessedEvent[] = [];;
+
+            // if gap exists between last event and this event, add a no event
+            if (event.start > prevEvent.end) {
+                newEvents.push(create_no_event(b, prevEvent.end, event.start));
+            }
+
+            // add event
+            newEvents.push(event);
+
+            // if this is the last event and it ends before midnight, add a no event
+            if (i + 1 == bucket.length && event.end < midnight) {
+                newEvents.push(create_no_event(b, event.end, midnight));
+            }
+
+            prevEvent = event;
+            return [...acc, ...newEvents];
+        }, [] as ProcessedEvent[]);
+    });
 }
 
 const colors: { [key: string]: string } = {

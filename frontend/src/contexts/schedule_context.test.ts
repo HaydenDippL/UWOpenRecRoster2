@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
 import { Event, ProcessedEvent } from "../types/schedule";
 import { Facility } from "../types/schedule";
-import { bucketify, process_buckets } from "./schedule_context";
+import { bucketify, process_buckets, add_no_events } from "./schedule_context";
 
 describe("bucketify", () => {
     it("sorts into correct buckets", () => {
@@ -232,3 +232,98 @@ describe("process_buckets", () => {
         expect(result[0][1].color).toBe(result[1][0].color); // Duplicate events same color
     });
 });
+describe("add_no_events", () => {
+    it("creates single no event for empty bucket", () => {
+        const input: ProcessedEvent[][] = [[]];
+        const date: DateTime = DateTime.fromISO("2025-04-11T08:00:00-05:00").setZone('America/Chicago');
+        const result = add_no_events(input, date);
+        expect(result[0].length).toBe(1);
+        expect(result[0][0].name).toBe("No Event Scheduled");
+        expect(result[0][0].start.hour).toBe(6);
+        expect(result[0][0].end.hour).toBe(0); // midnight
+    });
+
+    it("adds no event before first event if needed", () => {
+        const input: ProcessedEvent[][] = [[{
+            name: "Event",
+            bucket: 0,
+            start: DateTime.fromISO("2025-04-11T08:00:00-05:00").setZone('America/Chicago'),
+            end: DateTime.fromISO("2025-04-12T00:00:00-05:00").setZone('America/Chicago'),
+            color: "#000000"
+        }]];
+        const date: DateTime = DateTime.fromISO("2025-04-11T08:00:00-05:00").setZone('America/Chicago');
+        const result = add_no_events(input, date);
+        expect(result[0].length).toBe(2);
+        expect(result[0][0].name).toBe("No Event Scheduled");
+        expect(result[0][0].start.hour).toBe(6);
+        expect(result[0][0].end.hour).toBe(8);
+    });
+
+    it("adds no event after last event if needed", () => {
+        const input: ProcessedEvent[][] = [[{
+            name: "Event",
+            bucket: 0,
+            start: DateTime.fromISO("2025-04-11T06:00:00-05:00").setZone('America/Chicago'),
+            end: DateTime.fromISO("2025-04-11T22:00:00-05:00").setZone('America/Chicago'),
+            color: "#000000"
+        }]];
+        const date: DateTime = DateTime.fromISO("2025-04-11T06:00:00-05:00").setZone('America/Chicago');
+        const result = add_no_events(input, date);
+        expect(result[0].length).toBe(2);
+        expect(result[0][1].name).toBe("No Event Scheduled");
+        expect(result[0][1].start.hour).toBe(22);
+        expect(result[0][1].end.hour).toBe(0);
+    });
+
+    it("adds no event between gaps in schedule", () => {
+        const input: ProcessedEvent[][] = [[{
+            name: "Event 1",
+            bucket: 0,
+            start: DateTime.fromISO("2025-04-11T06:00:00-05:00").setZone('America/Chicago'),
+            end: DateTime.fromISO("2025-04-11T12:00:00-05:00").setZone('America/Chicago'),
+            color: "#000000"
+        },
+        {
+            name: "Event 2", 
+            bucket: 0,
+            start: DateTime.fromISO("2025-04-11T14:00:00-05:00").setZone('America/Chicago'),
+            end: DateTime.fromISO("2025-04-12T00:00:00-05:00").setZone('America/Chicago'),
+            color: "#000000"
+        }]];
+        const date: DateTime = DateTime.fromISO("2025-04-11T06:00:00-05:00").setZone('America/Chicago');
+        const result = add_no_events(input, date);
+        expect(result[0].length).toBe(3);
+        expect(result[0][1].name).toBe("No Event Scheduled");
+        expect(result[0][1].start.hour).toBe(12);
+        expect(result[0][1].end.hour).toBe(14);
+    });
+
+    it("handles complex schedule with multiple gaps", () => {
+        const input: ProcessedEvent[][] = [[{
+            name: "Morning Event",
+            bucket: 0,
+            start: DateTime.fromISO("2025-04-11T08:00:00-05:00").setZone('America/Chicago'),
+            end: DateTime.fromISO("2025-04-11T12:00:00-05:00").setZone('America/Chicago'),
+            color: "#000000"
+        },
+        {
+            name: "Afternoon Event",
+            bucket: 0,
+            start: DateTime.fromISO("2025-04-11T14:00:00-05:00").setZone('America/Chicago'),
+            end: DateTime.fromISO("2025-04-11T22:00:00-05:00").setZone('America/Chicago'),
+            color: "#000000"
+        }]];
+        const date: DateTime = DateTime.fromISO("2025-04-11T08:00:00-05:00").setZone('America/Chicago')
+        const result = add_no_events(input, date);
+        expect(result[0].length).toBe(5);
+        expect(result[0][0].name).toBe("No Event Scheduled");
+        expect(result[0][0].start.hour).toBe(6);
+        expect(result[0][0].end.hour).toBe(8);
+        expect(result[0][2].name).toBe("No Event Scheduled");
+        expect(result[0][2].start.hour).toBe(12);
+        expect(result[0][2].end.hour).toBe(14);
+        expect(result[0][4].name).toBe("No Event Scheduled");
+        expect(result[0][4].start.hour).toBe(22);
+        expect(result[0][4].end.hour).toBe(0);
+    });
+})
