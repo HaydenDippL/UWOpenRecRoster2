@@ -5,7 +5,7 @@ import { DateTime } from 'luxon';
 import Schedule from './schedule';
 import { Facility, Gym } from './types/schedule';
 
-type FocusedActivities = {
+export type FocusedActivities = {
     "Open Rec Basketball": boolean,
     "Open Rec Volleyball": boolean,
     "Open Rec Badminton/Pickleball": boolean,
@@ -109,9 +109,9 @@ function App() {
                 </div>
             })
         }</div>
-        <Schedule gym={Gym.bakke} facility={facility} date={today} />
+        <Schedule gym={Gym.bakke} facility={facility} date={today} focusedActivities={focusedActivities} />
         <div className="h-4" />
-        <Schedule gym={Gym.nick} facility={facility} date={today} />
+        <Schedule gym={Gym.nick} facility={facility} date={today} focusedActivities={focusedActivities} />
     </main>
 }
 
