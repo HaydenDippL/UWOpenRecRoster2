@@ -18,32 +18,29 @@ export default function Schedule({ gym, facility, date, focusedActivities }: Sch
         return <></>;
     }
 
-    if (!schedules) {
-        // TODO: skeleton loading
-        return <></>;
-    }
-
-    const schedule: ProcessedFacilities = schedules[gym];
-    const events: ProcessedEvent[] = schedule[facility];
-
-    if (!events) {
-        // TODO: gym closed
-        return <></>
-    }
+    const schedule: ProcessedFacilities | null = schedules ? schedules[gym] : null;
+    const events: ProcessedEvent[] | null = schedule ? schedule[facility] : null;
 
     const MINUTES_IN_SCHEDULE = 18 * 60;
     const sixAm = date.setZone("America/Chicago", { keepLocalTime: true }).set({ hour: 6, minute: 0, second: 0, millisecond: 0 });
     
-    const num_buckets: number = events.reduce((acc, curr) => {
+    const num_buckets: number = (events || []).reduce((acc, curr) => {
         return Math.max(acc, curr.bucket);
     }, 0) + 1;
     const width: string = `${100 / num_buckets}%`;
 
     const focusMode: boolean = Object.values(focusedActivities).some(bool => bool);
 
-    return <div>
-        <svg width="400" height="800">
-            {events.map((event, i) => {
+    return <div className="relative w-[400px] h-[800px]">
+        {schedule == null && (
+            <div className="absolute inset-0 w-full h-full skeleton" />
+        )}
+        <svg
+            className="absolute inset-0 w-full h-full"
+            width="400"
+            height="800"
+        >
+            {events && events.map((event, i) => {
                 const start_minute: number = event.start.diff(sixAm, "minutes").toObject().minutes || 0;
                 const end_minute: number = event.end.diff(sixAm, "minutes").toObject().minutes || 0;
 
@@ -54,7 +51,7 @@ export default function Schedule({ gym, facility, date, focusedActivities }: Sch
                 } else {
                     logicalEventName = event.name;
                 }
-                
+
                 const grayscaleFilterClass: string = !focusMode || focusedActivities[logicalEventName as keyof FocusedActivities] ? "" : "grayscale";
 
                 return (

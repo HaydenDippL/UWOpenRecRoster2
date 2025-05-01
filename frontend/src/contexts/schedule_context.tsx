@@ -44,6 +44,8 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }) {
      * @throws error if the request fails
      */
     const fetchSchedules = async(date: DateTime): Promise<ScheduleResp | null> => {
+        setSchedules(null);
+
         const formatedDate: string = date.toFormat("yyyy-MM-dd");
     
         const resp = await fetch(`http://localhost:8001/schedule?date=${formatedDate}`);
